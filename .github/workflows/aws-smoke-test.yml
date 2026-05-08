@@ -1,0 +1,39 @@
+name: AWS OIDC smoke test
+
+# Triggered manually from the Actions tab
+on:
+  workflow_dispatch:
+
+# Required for OIDC to work — the workflow needs permission to request the JWT
+permissions:
+  id-token: write     # required to mint the OIDC token
+  contents: read      # standard checkout permission
+
+jobs:
+  verify-oidc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::923347312486:role/github-actions-deployer
+          aws-region: us-east-1
+          role-session-name: GHA-${{ github.run_id }}
+
+      - name: Verify identity
+        run: |
+          echo "=== Caller identity (should show the role, not your IAM user) ==="
+          aws sts get-caller-identity
+          echo ""
+          echo "=== Confirm we can list the Terraform state bucket ==="
+          aws s3api head-bucket --bucket zillow-baltimore-tf-state-923347312486
+          echo "Bucket access OK"
+          echo ""
+          echo "=== Confirm we can describe the Terraform lock table ==="
+          aws dynamodb describe-table \
+            --table-name zillow-baltimore-tf-locks \
+            --query "Table.TableStatus" \
+            --output text

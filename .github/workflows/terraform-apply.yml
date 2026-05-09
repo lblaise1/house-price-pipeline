@@ -1,0 +1,60 @@
+name: Terraform apply (dev)
+
+# Runs on push to main.
+# Applies any pending Terraform changes to the dev environment.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.terraform-version'
+      - '.github/workflows/terraform-apply.yml'
+  workflow_dispatch:        # allow manual runs from the Actions tab
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-apply-dev
+  cancel-in-progress: false   # never cancel an apply in progress
+
+jobs:
+  apply:
+    name: Apply dev
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/envs/dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read pinned Terraform version
+        id: tfver
+        run: echo "version=$(cat ../../../.terraform-version)" >> "$GITHUB_OUTPUT"
+        working-directory: .
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ steps.tfver.outputs.version }}
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::923347312486:role/github-actions-deployer
+          aws-region: us-east-1
+          role-session-name: GHA-apply-${{ github.run_id }}
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve -input=false

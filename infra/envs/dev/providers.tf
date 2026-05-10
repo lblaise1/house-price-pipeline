@@ -21,3 +21,6 @@ provider "aws" {
     }
   }
 }
+
+# Reads the current AWS account ID at apply time
+data "aws_caller_identity" "current" {}
